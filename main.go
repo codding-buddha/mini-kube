@@ -72,7 +72,7 @@ func main() {
 
 	time.Sleep(time.Second * 5)
 	fmt.Printf("stopping container %s\n", createResult.ContainerId)
-	_ = stopContainer(dockerTask)
+	_ = stopContainer(dockerTask, createResult.ContainerId)
 }
 
 func createContainer() (*task.Docker, *task.DockerResult) {
@@ -101,8 +101,8 @@ func createContainer() (*task.Docker, *task.DockerResult) {
 	return &d, &result
 }
 
-func stopContainer(d *task.Docker) *task.DockerResult {
-	result := d.Stop()
+func stopContainer(d *task.Docker, id string) *task.DockerResult {
+	result := d.Stop(id)
 	if result.Error != nil {
 		fmt.Printf("%v\n", result.Error)
 		return nil
