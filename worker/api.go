@@ -21,6 +21,9 @@ type Api struct {
 
 func (api *Api) initRouter() {
 	api.Router = chi.NewRouter()
+	api.Router.Route("/stats", func(r chi.Router) {
+		r.Get("/", api.GetStatsHandler)
+	})
 	api.Router.Route("/tasks", func(r chi.Router) {
 		r.Post("/", api.StartTaskHandler)
 		r.Get("/", api.GetTasksHandler)
