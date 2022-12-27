@@ -2,88 +2,48 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
-	"time"
 
+	"github.com/codding-buddha/mini-kube/manager"
 	"github.com/codding-buddha/mini-kube/task"
 	"github.com/codding-buddha/mini-kube/worker"
-	"github.com/docker/docker/client"
 	"github.com/golang-collections/collections/queue"
 	"github.com/google/uuid"
 )
 
 func main() {
-	host := os.Getenv("MINI_KUBE_HOST")
-	fmt.Println(os.Getenv("MINI_KUBE_PORT"))
-	port, err := strconv.Atoi(os.Getenv("MINI_KUBE_PORT"))
+	whost := os.Getenv("MINI_KUBE_WORKER_HOST")
+	wport, err := strconv.Atoi(os.Getenv("MINI_KUBE_WORKER_PORT"))
+	if err != nil {
+		panic(err)
+	}
+
+	mhost := os.Getenv("MINI_KUBE_MANAGER_HOST")
+	mport, err := strconv.Atoi(os.Getenv("MINI_KUBE_MANAGER_PORT"))
 
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Printf("Starting worker and API at %v:%v\n", host, port)
+	fmt.Printf("Starting worker and API at %v:%v\n", whost, wport)
 
 	w := worker.Worker{
 		Queue: *queue.New(),
 		Db:    make(map[uuid.UUID]*task.Task),
 	}
 
-	api := worker.Api{Address: host, Port: port, Worker: &w}
-	go runTasks(&w)
+	wapi := worker.Api{Address: whost, Port: wport, Worker: &w}
+	go w.RunTasks()
 	go w.CollectStats()
-	api.Start()
-}
+	go wapi.Start()
 
-func runTasks(w *worker.Worker) {
-	for {
-		if w.Queue.Len() != 0 {
-			result := w.RunTasks()
-			if result.Error != nil {
-				log.Printf("Error running tasks: %v\n", result.Error)
-			}
-		} else {
-			log.Printf("No tasks to process currently, task queue is empty.\n")
-		}
-		log.Println("Sleeping for 10 seconds")
-		time.Sleep(10 * time.Second)
-	}
-}
+	workers := []string{fmt.Sprintf("%s:%d", whost, wport)}
+	fmt.Printf("Starting manager and API at %v:%v\n", mhost, mport)
+	m := manager.New(workers)
+	mapi := manager.Api{Address: mhost, Port: mport, Manager: m}
+	go m.ProcessTasks()
+	go m.UpdateTasks()
 
-func createContainer() (*task.Docker, *task.DockerResult) {
-	c := task.Config{
-		Name:  "test-container-1",
-		Image: "postgres:13",
-		Env: []string{
-			"POSTGRES_USER=cube",
-			"POSTGRES_PASSWORD=secret",
-		},
-	}
-
-	dc, _ := client.NewClientWithOpts(client.FromEnv)
-	d := task.Docker{
-		Config: c,
-		Client: dc,
-	}
-
-	result := d.Run()
-	if result.Error != nil {
-		fmt.Printf("%v\n", result.Error)
-		return nil, nil
-	}
-
-	fmt.Printf("Container %s is running with config %v\n", result.ContainerId, c)
-	return &d, &result
-}
-
-func stopContainer(d *task.Docker, id string) *task.DockerResult {
-	result := d.Stop(id)
-	if result.Error != nil {
-		fmt.Printf("%v\n", result.Error)
-		return nil
-	}
-
-	fmt.Printf("Container %s has been stopped and removed\n", result.ContainerId)
-	return &result
+	mapi.Start()
 }

@@ -19,41 +19,6 @@ type Worker struct {
 	TaskCount int
 }
 
-func (w *Worker) RunTasks() task.DockerResult {
-	t := w.Queue.Dequeue()
-	if t == nil {
-		log.Printf("No tasks in the queue")
-		return task.DockerResult{Error: nil}
-	}
-
-	taskQueued := t.(task.Task)
-	taskPersisted := w.Db[taskQueued.ID]
-
-	if taskPersisted == nil {
-		taskPersisted = &taskQueued
-		w.Db[taskPersisted.ID] = &taskQueued
-	}
-
-	var result task.DockerResult
-
-	if task.ValidStateTransition(taskPersisted.State, taskQueued.State) {
-		switch taskQueued.State {
-		case task.Scheduled:
-			result = w.StartTask(taskQueued)
-		case task.Completed:
-			result = w.StopTask(taskQueued)
-		default:
-			result.Error = errors.New("Invalid State! ")
-
-		}
-	} else {
-		err := fmt.Errorf("Invalid transistion from %v to %v", taskPersisted.State, taskQueued.State)
-		result.Error = err
-	}
-
-	return result
-}
-
 func (w *Worker) AddTask(t task.Task) {
 	w.Queue.Enqueue(t)
 }
@@ -109,4 +74,54 @@ func (w *Worker) CollectStats() {
 		w.TaskCount = w.Stats.TaskCount
 		time.Sleep(15 * time.Second)
 	}
+}
+
+func (w *Worker) RunTasks() {
+	for {
+		if w.Queue.Len() != 0 {
+			result := w.runTask()
+			if result.Error != nil {
+				log.Printf("Error running tasks: %v\n", result.Error)
+			}
+		} else {
+			log.Printf("No tasks to process currently, task queue is empty.\n")
+		}
+		log.Println("Sleeping for 10 seconds")
+		time.Sleep(10 * time.Second)
+	}
+}
+
+func (w *Worker) runTask() task.DockerResult {
+	t := w.Queue.Dequeue()
+	if t == nil {
+		log.Printf("No tasks in the queue")
+		return task.DockerResult{Error: nil}
+	}
+
+	taskQueued := t.(task.Task)
+	taskPersisted := w.Db[taskQueued.ID]
+
+	if taskPersisted == nil {
+		taskPersisted = &taskQueued
+		w.Db[taskPersisted.ID] = &taskQueued
+	}
+
+	var result task.DockerResult
+
+	if task.ValidStateTransition(taskPersisted.State, taskQueued.State) {
+		switch taskQueued.State {
+		case task.Scheduled:
+			result = w.StartTask(taskQueued)
+		case task.Completed:
+			result = w.StopTask(taskQueued)
+		default:
+			result.Error = errors.New("Invalid State! ")
+
+		}
+	} else {
+		err := fmt.Errorf("Invalid transistion from %v to %v", taskPersisted.State, taskQueued.State)
+		result.Error = err
+	}
+
+	return result
 }
