@@ -19,6 +19,12 @@ type Worker struct {
 	TaskCount int
 }
 
+func (w *Worker) InspectTask(t task.Task) task.DockerInspectResponse {
+	config := task.NewConfig(&t)
+	d := task.NewDocker(config)
+	return d.Inspect(t.ContainerID)
+}
+
 func (w *Worker) AddTask(t task.Task) {
 	w.Queue.Enqueue(t)
 }
@@ -76,6 +82,42 @@ func (w *Worker) CollectStats() {
 	}
 }
 
+func (w *Worker) UpdateTasks() {
+	for {
+		log.Println("Checking status of tasks.")
+		w.updateTasks()
+		log.Println("Task update completed.")
+		log.Println("Sleeping for 15 seconds.")
+		time.Sleep(15 * time.Second)
+	}
+}
+
+func (w *Worker) updateTasks() {
+	for id, t := range w.Db {
+		if t.State == task.Running {
+			resp := w.InspectTask(*t)
+			if resp.Error != nil {
+				fmt.Printf("ERROR: %v", resp.Error)
+			}
+
+			if resp.Container == nil {
+				log.Printf("No container for running task %s", id)
+				w.Db[id].State = task.Failed
+			}
+
+			if resp.Container.State.Status == "exited" {
+				log.Printf("Container for task %s in non-running state %s", id, resp.Container.State.Status)
+				w.Db[id].State = task.Failed
+			}
+
+			log.Printf("Running on port %v.\n", resp.Container.NetworkSettings.NetworkSettingsBase.Ports)
+
+			w.Db[id].HostPorts = resp.Container.NetworkSettings.NetworkSettingsBase.Ports
+		}
+	}
+
+}
+
 func (w *Worker) RunTasks() {
 	for {
 		if w.Queue.Len() != 0 {
@@ -111,6 +153,13 @@ func (w *Worker) runTask() task.DockerResult {
 	if task.ValidStateTransition(taskPersisted.State, taskQueued.State) {
 		switch taskQueued.State {
 		case task.Scheduled:
+			if taskQueued.ContainerID != "" {
+				result = w.StopTask(taskQueued)
+				if result.Error != nil {
+					log.Printf("Error stopping existing container %v.\n", result.Error)
+				}
+			}
+
 			result = w.StartTask(taskQueued)
 		case task.Completed:
 			result = w.StopTask(taskQueued)

@@ -36,6 +36,7 @@ func main() {
 	wapi := worker.Api{Address: whost, Port: wport, Worker: &w}
 	go w.RunTasks()
 	go w.CollectStats()
+	go w.UpdateTasks()
 	go wapi.Start()
 
 	workers := []string{fmt.Sprintf("%s:%d", whost, wport)}
@@ -44,6 +45,7 @@ func main() {
 	mapi := manager.Api{Address: mhost, Port: mport, Manager: m}
 	go m.ProcessTasks()
 	go m.UpdateTasks()
+	go m.DoHealthChecks()
 
 	mapi.Start()
 }
