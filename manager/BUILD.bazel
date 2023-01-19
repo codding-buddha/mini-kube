@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "manager",
+    srcs = [
+        "api.go",
+        "handlers.go",
+        "manager.go",
+    ],
+    importpath = "github.com/codding-buddha/mini-kube/manager",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//common",
+        "//task",
+        "@com_github_docker_go_connections//nat:go_default_library",
+        "@com_github_go_chi_chi_v5//:go_default_library",
+        "@com_github_golang_collections_collections//queue:go_default_library",
+        "@com_github_google_uuid//:go_default_library",
+    ],
+)
