@@ -44,7 +44,3 @@ _testmain.go
 /test/run.out
 /test/times.out
 bazel-*
-bazel-bin/
-bazel-out/
-bazel-testlogs/
-bazel-mini-kube/
